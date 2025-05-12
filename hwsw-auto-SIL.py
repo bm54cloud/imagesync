@@ -175,3 +175,4 @@ if __name__ == "__main__":
 # TODO: Problems to solve
 # 1. Gitlab Runner image doesn't have version in image name
 # 2. Low fruit, but is there an option where after it writes all the new lines, it sorts them alphabetically via the Software Name column
+# 3. Make sure it doesn't overwrite the Zone B Infrastructure and Image Pipeline items
