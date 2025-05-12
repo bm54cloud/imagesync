@@ -18,7 +18,6 @@ import argparse
 
 # --- CONFIGURATION ---
 YAML_PATH = "images.yaml"
-# EXCEL_PATH = "HWSWList_04_25_2025-auto.xlsm" # TODO: Will need to update name of this file (can we do it automagically)
 SHEET_NAME = "Software-SIL"
 START_ROW = 8 # Start writing from this row 8 (first 7 rows are HEADERS)
 VERSION_COL_IDX = 5  # Update column E (Version)
@@ -49,7 +48,7 @@ def prepare_images_yaml(path):
         print(f"{path} already exists and is not empty.")
 
 # Run imagesync to extract images from cluster
-# Replace {os.environ['HOME']}/.kube/config-prod-sil with location of cluster KUBECONFIG (default is .kube/config)
+# Replace os.environ['HOME']}/.kube/config-prod-sil with location of cluster KUBECONFIG (default is .kube/config)
 def run_imagesync():
     prepare_images_yaml(YAML_PATH)
 
@@ -76,13 +75,16 @@ def extract_versions():
 
     for image_entry in data.get("images", []):
         full_name = image_entry["name"]
+        if "RELEASE" in full_name:
+            print(f"Skipping image with RELEASE tag: {full_name}")
+            continue
         full_image_list.append(full_name)
         if ":" in full_name:
             raw_version = full_name.split(":")[-1]
             version = raw_version.split("-")[0]  # Truncate at first hyphen
             image_name = full_name.split("/")[-1].split(":")[0]
             image_versions[image_name] = version
-    print(f"Extracted {len(full_image_list)} images.")
+    print(f"Extracted {len(full_image_list)} images (excluding RELEASE entries).")
     return image_versions, full_image_list
 
 # Get Friday's date for HWSWList file name
@@ -133,3 +135,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# TODO: Problems to solve
+# 1. Script writes to specific columns but doesn't match Software Name to Image Name, so you can have situations where the Version is written in order, but becomes out of sync with Software Name
+# 2. Gitlab Runner image doesn't have version in image name
+# 3. Low fruit, but is there an option where after it writes all the new lines, it sorts them alphabetically via the Software Name column
