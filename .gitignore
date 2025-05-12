@@ -3,3 +3,4 @@ images.yaml
 _build/
 **/.sigstore
 HWSWList*.xlsm
+~$HWSWList*.xlsm
