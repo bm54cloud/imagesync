@@ -8,6 +8,7 @@
 # python3 -m venv ~/pyvmomi-env
 # source ~/pyvmomi-env/bin/activate
 # --input argument is required and should be the path of the most recent HWSWList file (ex: ./hwsw-auto-SIL.py --input HWSWList_05_02_2025-auto.xlsm")
+# Newly discovered images that do not match to a row in Software Name will print "no match found" and can be manually added
 
 import os
 import subprocess
@@ -16,7 +17,6 @@ from openpyxl import load_workbook
 from datetime import datetime, timedelta
 import argparse
 
-# --- CONFIGURATION ---
 YAML_PATH = "images.yaml"
 SHEET_NAME = "Software-SIL"
 START_ROW = 8 # Start writing from this row 8 (first 7 rows are HEADERS)
@@ -95,33 +95,70 @@ def get_friday_filename():
     formatted_date = this_friday.strftime("%m_%d_%Y")
     return f"HWSWList_{formatted_date}-auto.xlsm"
 
-# Update Software-SIL sheet of HWSWList spreadsheet with extracted image version to column E and image name to column F
 def update_excel(image_versions, full_image_list, input_path):
+    # Load latest HWSWlist identified as --input
     print(f"Opening Excel file: {input_path}")
     wb = load_workbook(input_path, keep_vba=True)
     ws = wb[SHEET_NAME]
 
-    updated_count = 0
-    row = START_ROW
+    # Build mapping of {row_number: software_name} from column D to allow matching full image names to known software names
+    software_rows = {}
+    for row in ws.iter_rows(min_row=START_ROW, min_col=4, max_col=4):  # Column D
+        cell = row[0]
+        if cell.value:
+            software_rows[cell.row] = str(cell.value).strip()
 
+    # Track which rows have already been written to, to avoid duplicates
+    matched_rows = set()
+    updated_count = 0
+
+    # Normalize Software Names by splitting into keywords
+    def tokenize(text):
+        return text.lower().replace("_", "-").replace(" ", "-").split("-")
+
+    # Loop through all Image Names extracted from images.yaml
     for full_image in full_image_list:
+        # Extract version tag from Image Name and truncate at first hyphen
         if ":" in full_image:
             raw_version = full_image.split(":")[-1]
-            version = raw_version.split("-")[0]  # Truncate at first hyphen
+            version = raw_version.split("-")[0]
         else:
             version = ""
 
-        ws.cell(row=row, column=VERSION_COL_IDX, value=version)
-        ws.cell(row=row, column=FULL_IMAGE_COL_IDX, value=full_image)
+        image_string = full_image.lower() # Normalize image string for comparison
+        best_row = None
+        best_match_count = 0 # How many tokens matched
+        best_tokens = []
 
-        updated_count += 1
-        row += 1
+        # Find best-matching Software Name row
+        for row_num, sw_name in software_rows.items():
+            if row_num in matched_rows:
+                continue  # Skip already matched rows (don't write to same row twice)
 
-    # Save as new file with Friday's date
+            sw_tokens = tokenize(sw_name) # Break Software Name into tokens
+            match_count = sum(1 for token in sw_tokens if token in image_string)
+
+            # Find best match with highest number of keyword hits
+            if match_count > best_match_count:
+                best_match_count = match_count
+                best_row = row_num
+                best_tokens = sw_tokens
+
+        # If a good match was found, write Version and Image Name into that row
+        if best_row and best_match_count > 0:
+            ws.cell(row=best_row, column=VERSION_COL_IDX, value=version)
+            ws.cell(row=best_row, column=FULL_IMAGE_COL_IDX, value=full_image)
+            matched_rows.add(best_row)
+            updated_count += 1
+            print(f"✅ Matched: '{full_image}' → row {best_row} ('{software_rows[best_row]}'), tokens: {best_tokens}, score: {best_match_count}")
+        else:
+            print(f"⚠️  No good match found for image: {full_image}")
+
+    # Save updated workbook with new name based on current week's Friday date
     new_filename = get_friday_filename()
     wb.save(new_filename)
-    print(f"Update complete. {updated_count} rows written to columns E and F of '{SHEET_NAME}'.")
-    print(f"Workbook saved as: {new_filename}")
+    print(f"\n✅ Update complete. {updated_count} rows written to '{SHEET_NAME}'.")
+    print(f"📁 Workbook saved as: {new_filename}")
 
 def main():
     parser = argparse.ArgumentParser(description="Update HWSW Excel sheet with image versions.")
@@ -132,11 +169,9 @@ def main():
     versions, image_list = extract_versions()
     update_excel(versions, image_list, args.input)
 
-
 if __name__ == "__main__":
     main()
 
 # TODO: Problems to solve
-# 1. Script writes to specific columns but doesn't match Software Name to Image Name, so you can have situations where the Version is written in order, but becomes out of sync with Software Name
-# 2. Gitlab Runner image doesn't have version in image name
-# 3. Low fruit, but is there an option where after it writes all the new lines, it sorts them alphabetically via the Software Name column
+# 1. Gitlab Runner image doesn't have version in image name
+# 2. Low fruit, but is there an option where after it writes all the new lines, it sorts them alphabetically via the Software Name column
