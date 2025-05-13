@@ -8,6 +8,8 @@
 # Required arguments: --input (path to most recent HWSWList file), --kubeconfig, --sheet (sheet of HWSW to update)
 # Sample command: ./hwsw-auto.py --input HWSWList_05_02_2025-auto.xlsm --kubeconfig ~/.kube/config-prod --sheet Software-SIL
 # Newly discovered images that do not match to a row in Software Name will print "no match found" and can be manually added
+# Softwares that are manually updated should include '(#manual)' in the Software Name column and they will be skipped (not automatically matched to an image)
+# Matching is not 100% accurate, and the updates should be manually confirmed that the Image Name and Version wrote to the correct Software Name row prior to submitting
 
 import os
 import subprocess
