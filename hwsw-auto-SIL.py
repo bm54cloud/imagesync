@@ -106,7 +106,10 @@ def update_excel(image_versions, full_image_list, input_path):
     for row in ws.iter_rows(min_row=START_ROW, min_col=4, max_col=4):  # Column D
         cell = row[0]
         if cell.value:
-            software_rows[cell.row] = str(cell.value).strip()
+            software_name = str(cell.value).strip()
+            if "#manual" in software_name.lower():
+                continue # Skip manually updated rows
+            software_rows[cell.row] = software_name
 
     # Track which rows have already been written to, to avoid duplicates
     matched_rows = set()
@@ -173,6 +176,4 @@ if __name__ == "__main__":
     main()
 
 # TODO: Problems to solve
-# 1. Gitlab Runner image doesn't have version in image name
-# 2. Low fruit, but is there an option where after it writes all the new lines, it sorts them alphabetically via the Software Name column
 # 3. Make sure it doesn't overwrite the Zone B Infrastructure and Image Pipeline items
