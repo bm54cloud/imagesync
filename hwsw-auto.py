@@ -5,7 +5,7 @@
 # Run script in a python environment
 # python3 -m venv ~/pyvmomi-env
 # source ~/pyvmomi-env/bin/activate
-# Required arguments: --input (path to most recent HWSWList file), --kubeconfig, --sheet (sheet of HWSW to update) TODO: it will create a new file every time????
+# Required arguments: --input (path to most recent HWSWList file), --kubeconfig, --sheet (sheet of HWSW to update)
 # Sample command: ./hwsw-auto.py --input HWSWList_05_02_2025-auto.xlsm --kubeconfig ~/.kube/config-prod --sheet Software-SIL
 # Newly discovered images that do not match to a row in Software Name will print "no match found" and can be manually added
 
