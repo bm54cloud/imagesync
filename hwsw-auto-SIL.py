@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-# Script to update SIL sheet of HWSW list file
+# Script to update HWSW list file
 # Connect to VPN
 # Script should be run from root of forked imagesync repo https://github.com/bm54cloud/imagesync
-# Script should be run from a
-# Update run_imagesync function to point to the kube config of the cluster you want to run against
 # Run script in a python environment
 # python3 -m venv ~/pyvmomi-env
 # source ~/pyvmomi-env/bin/activate
-# --input argument is required and should be the path of the most recent HWSWList file (ex: ./hwsw-auto-SIL.py --input HWSWList_05_02_2025-auto.xlsm")
+# Required arguments: --input (path to most recent HWSWList file), --kubeconfig, --sheet (sheet of HWSW to update) TODO: it will create a new file every time????
+# Sample command: ./hwsw-auto.py --input HWSWList_05_02_2025-auto.xlsm --kubeconfig ~/.kube/config-prod --sheet Software-SIL
 # Newly discovered images that do not match to a row in Software Name will print "no match found" and can be manually added
 
 import os
@@ -18,7 +17,6 @@ from datetime import datetime, timedelta
 import argparse
 
 YAML_PATH = "images.yaml"
-SHEET_NAME = "Software-SIL"
 START_ROW = 8 # Start writing from this row 8 (first 7 rows are HEADERS)
 VERSION_COL_IDX = 5  # Update column E (Version)
 FULL_IMAGE_COL_IDX = 6  # Update column F (Image Name)
@@ -48,15 +46,14 @@ def prepare_images_yaml(path):
         print(f"{path} already exists and is not empty.")
 
 # Run imagesync to extract images from cluster
-# Replace os.environ['HOME']}/.kube/config-prod-sil with location of cluster KUBECONFIG (default is .kube/config)
-def run_imagesync():
+def run_imagesync(kubeconfig_path):
     prepare_images_yaml(YAML_PATH)
 
     print("Running imagesync docker container...")
     cmd = [
         "docker", "run",
         "-v", f"{os.environ['HOME']}/.docker/:/home/python/.docker/",
-        "-v", f"{os.environ['HOME']}/.kube/config-prod-sil:/home/python/.kube/config",
+        "-v", f"{kubeconfig_path}:/home/python/.kube/config",
         "-v", f"{os.getcwd()}/{YAML_PATH}:/app/images.yaml",
         "--rm", "docker.io/chaospuppy/imagesync:v1.6.0",
         "-f", "/app/images.yaml", "tidy"
@@ -165,15 +162,18 @@ def update_excel(image_versions, full_image_list, input_path):
 
 def main():
     parser = argparse.ArgumentParser(description="Update HWSW Excel sheet with image versions.")
-    parser.add_argument("--input", required=True, help="Path to existing HWSW Excel file")
+    parser.add_argument("--input", required=True, help="Path to existing latest HWSW Excel file")
+    parser.add_argument("--kubeconfig", required=True, help="Path to the kubeconfig file for the cluster")
+    parser.add_argument("--sheet", required=True, help="Name of the worksheet to update (Software-SIL, Software-CP-DP, Software-vCloud)")
     args = parser.parse_args()
 
-    run_imagesync()
+    global SHEET_NAME
+    SHEET_NAME = args.sheet
+
+    run_imagesync(args.kubeconfig)
     versions, image_list = extract_versions()
     update_excel(versions, image_list, args.input)
 
 if __name__ == "__main__":
     main()
 
-# TODO: Problems to solve
-# 3. Make sure it doesn't overwrite the Zone B Infrastructure and Image Pipeline items
