@@ -6,7 +6,9 @@
 # python3 -m venv ~/pyvmomi-env
 # source ~/pyvmomi-env/bin/activate
 # Required arguments: --input (path to most recent HWSWList file), --kubeconfig, --sheet (sheet of HWSW to update)
-# Sample command: ./hwsw-auto.py --input HWSWList_05_02_2025-auto.xlsm --kubeconfig ~/.kube/config-prod --sheet Software-SIL
+# Optional argument: --output (path to final output file); if omitted on first run, file will be created automatically using Friday date
+# Sample initial run command: ./hwsw-auto.py --input HWSWList_05_02_2025-auto.xlsm --kubeconfig ~/.kube/config-prod --sheet Software-SIL
+# Sample subsequent run command: ./hwsw-auto.py --input HWSWList_05_02_2025-auto.xlsm --output HWSWList_05_17_2025-auto.xlsm --kubeconfig ~/.kube/config-alt --sheet Software-CP-DP
 # Newly discovered images that do not match to a row in Software Name will print "no match found" and can be manually added
 # Softwares that are manually updated should include '(#manual)' in the Software Name column and they will be skipped (not automatically matched to an image)
 # Matching is not 100% accurate, and the updates should be manually confirmed that the Image Name and Version wrote to the correct Software Name row prior to submitting
@@ -17,6 +19,7 @@ import yaml
 from openpyxl import load_workbook
 from datetime import datetime, timedelta
 import argparse
+import shutil
 
 YAML_PATH = "images.yaml"
 START_ROW = 8 # Start writing from this row 8 (first 7 rows are HEADERS)
@@ -94,10 +97,10 @@ def get_friday_filename():
     formatted_date = this_friday.strftime("%m_%d_%Y")
     return f"HWSWList_{formatted_date}-auto.xlsm"
 
-def update_excel(image_versions, full_image_list, input_path):
+def update_excel(image_versions, full_image_list, workbook_path):
     # Load latest HWSWlist identified as --input
-    print(f"Opening Excel file: {input_path}")
-    wb = load_workbook(input_path, keep_vba=True)
+    print(f"Opening Excel file: {workbook_path}")
+    wb = load_workbook(workbook_path, keep_vba=True)
     ws = wb[SHEET_NAME]
 
     # Build mapping of {row_number: software_name} from column D to allow matching full image names to known software names
@@ -140,6 +143,9 @@ def update_excel(image_versions, full_image_list, input_path):
             sw_tokens = tokenize(sw_name) # Break Software Name into tokens
             match_count = sum(1 for token in sw_tokens if token in image_string)
 
+            if sw_tokens ==1:
+                best_match_count = 0;
+
             # Find best match with highest number of keyword hits
             if match_count > best_match_count:
                 best_match_count = match_count
@@ -157,14 +163,14 @@ def update_excel(image_versions, full_image_list, input_path):
             print(f"⚠️  No good match found for image: {full_image}")
 
     # Save updated workbook with new name based on current week's Friday date
-    new_filename = get_friday_filename()
-    wb.save(new_filename)
+    wb.save(workbook_path)
     print(f"\n✅ Update complete. {updated_count} rows written to '{SHEET_NAME}'.")
-    print(f"📁 Workbook saved as: {new_filename}")
+    print(f"📁 Workbook saved as: {workbook_path}")
 
 def main():
     parser = argparse.ArgumentParser(description="Update HWSW Excel sheet with image versions.")
     parser.add_argument("--input", required=True, help="Path to existing latest HWSW Excel file")
+    parser.add_argument("--output", help="Path to output Excel file (reused for multiple sheets)")
     parser.add_argument("--kubeconfig", required=True, help="Path to the kubeconfig file for the cluster")
     parser.add_argument("--sheet", required=True, help="Name of the worksheet to update (Software-SIL, Software-CP-DP, Software-vCloud)")
     args = parser.parse_args()
@@ -172,9 +178,20 @@ def main():
     global SHEET_NAME
     SHEET_NAME = args.sheet
 
+    # Write to Friday file for initial or --output path if defined
+    output_path = args.output or get_friday_filename()
+    if not os.path.exists(output_path):
+        print(f"📁 Creating new output file: {output_path} from template {args.input}")
+        shutil.copyfile(args.input, output_path)
+    else:
+        if not args.output:
+            print(f"⚠️  WARNING: Output file '{output_path}' already exists. Specify --output to avoid overwriting unintended data.")
+        else:
+            print(f"📁 Appending updates to existing file: {output_path}")
+
     run_imagesync(args.kubeconfig)
     versions, image_list = extract_versions()
-    update_excel(versions, image_list, args.input)
+    update_excel(versions, image_list, output_path)
 
 if __name__ == "__main__":
     main()
